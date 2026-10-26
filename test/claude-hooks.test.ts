@@ -54,7 +54,7 @@ describe('hook payloads', () => {
 
   it('describes the tool in the permission message and the tool start', () => {
     const result = parseHookPayload({ ...base, hook_event_name: 'PermissionRequest', tool_name: 'Bash', tool_input: { command: 'git push' } }, NOW);
-    expect(result.ok && result.events[1]).toMatchObject({ message: 'Autorisation demandée : Bash git push' });
+    expect(result.ok && result.events[1]).toMatchObject({ message: 'Bash git push' });
   });
 
   it.each([

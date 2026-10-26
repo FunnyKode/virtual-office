@@ -2,7 +2,26 @@
 
 Bureau virtuel en direct des agents **Claude Code** de ce poste : sessions, sous-agents, outil en cours, demandes d'autorisation, jetons consommés.
 
-Ce dépôt en est au **lot 1 : le socle**. Un serveur local collecte les événements et les diffuse en flux. La page fournie est un simple tableau de contrôle ; la scène 3D viendra au lot 2.
+Un serveur local collecte les événements et les diffuse en flux. Deux pages s'y branchent :
+
+- **`/`** : le bureau 3D (Three.js). Chaque session a son îlot, ses sous-agents travaillent autour d'elle, reliés par un faisceau. Un robot qui attend ton autorisation lève la main sous une balise orange, et une alerte liste ces demandes.
+- **`/tableau`** : la même information en tableau.
+
+## Le bureau 3D
+
+| Ce que l'on voit | Ce que cela signifie |
+|---|---|
+| Robot corail à un bureau | une session Claude Code ; l'écran prend la couleur de son état |
+| Petit robot gris autour de l'îlot | un sous-agent de cette session (faisceau coloré vers elle) |
+| Bras qui tapent | au travail ; la bulle dit quoi (lit le code, modifie, lance les tests, git…) |
+| Main levée et balise orange | attend ton autorisation |
+| Tête basse | silencieux depuis plus du seuil de silence |
+| Salle d'attente | sessions et sous-agents sans îlot libre |
+| Entrée et sortie par la porte | un agent qui commence ou qui finit |
+
+Commandes : glisser pour tourner, molette pour zoomer, double-clic ou *Recentrer* pour revenir, clic sur un robot ou sur la liste pour ouvrir sa fiche, `Échap` pour la fermer. *Visite* (`T`) fait tourner la caméra. *Mouvements réduits* fige les animations ; ce réglage suit par défaut la préférence système et se mémorise dans le navigateur.
+
+Chaque agent garde sa place d'une mise à jour à l'autre. Une session active ou en attente d'autorisation peut prendre l'îlot de la session inactive la plus ancienne. Le rendu s'arrête quand rien ne bouge. Sans WebGL, la page reste utilisable en liste en direct, avec l'alerte et les fiches.
 
 ## Principe
 
@@ -60,7 +79,9 @@ Toutes les réponses JSON utilisent la même enveloppe : `{ ok: true, data }` ou
 - Écoute sur la boucle locale uniquement : toute autre adresse est refusée au démarrage.
 - **Toutes les routes**, lectures comprises, vérifient `Host`, `Origin` et `Sec-Fetch-Site`. C'est ce qui bloque le DNS rebinding, qu'un simple contrôle sur les routes d'écriture laisserait passer.
 - Les hooks sont authentifiés par un jeton aléatoire de 256 bits, comparé en temps constant et stocké dans `~/.config/virtual-office/token` (droits 0600).
-- Corps limité à 1 Mo, `content-type` JSON exigé, CSP stricte sur la page, aucune construction HTML à partir des données (DOM uniquement).
+- Corps limité à 1 Mo, `content-type` JSON exigé, aucune construction HTML à partir des données (DOM uniquement).
+- CSP stricte sur les pages. L'importmap du bureau 3D est autorisée par son empreinte SHA-256, jamais par `unsafe-inline`.
+- Fichiers statiques : préfixes fixes, types `.js`/`.css` seulement, ni traversée de chemin ni lien symbolique sortant. Three.js est servi en local depuis `node_modules` et limité au build et aux modules d'exemple, sans CDN.
 - Les clients SSE qui ne lisent plus sont déconnectés : un onglet bloqué ne fait pas gonfler la mémoire du serveur.
 
 **Modèle de menace.** Le bureau vise une machine à un seul utilisateur. Les lectures (`/api/etat`, `/api/flux`) sont protégées contre les sites web, mais pas contre un autre compte ou un autre processus de la même machine. Ces lectures exposent les derniers prompts, les messages, les dossiers de travail et le résumé des commandes lancées. Sur une machine partagée, ne lancez pas le serveur.
@@ -90,6 +111,8 @@ npm run check
 
 Cette commande enchaîne le contrôle de types strict (`tsc`, sans émission) et les tests vitest avec la couverture (seuil de 80 %).
 
-Organisation : `src/domain` (types, réducteur pur, store), `src/sources` (hooks, transcripts, lecteur incrémental), `src/server` (HTTP, garde, SSE, jeton, configuration), `src/install` (fusion des réglages), `hooks/relay.mjs`, `public/` (page de contrôle), `test/`.
+Organisation : `src/domain` (types, réducteur pur, store), `src/sources` (hooks, transcripts, lecteur incrémental), `src/server` (HTTP, garde, SSE, jeton, configuration), `src/install` (fusion des réglages), `hooks/relay.mjs`, `public/office/` (bureau 3D : `logic/` pur et testé, `scene/` Three.js, `hud.js`), `public/` (pages), `test/`.
+
+La logique du bureau (placement, activité, bulles, flux) est testée par vitest. La scène 3D a besoin de WebGL : elle se vérifie dans un navigateur, par exemple Chrome en mode headless avec `--use-angle=swiftshader`.
 
 S'inspire de [bilwifi/bureau-agents-3d](https://github.com/bilwifi/bureau-agents-3d) (MIT).

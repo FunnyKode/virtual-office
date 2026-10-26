@@ -69,6 +69,24 @@ describe('transcript parser', () => {
     expect(createTranscriptParser(SUB).parseLine(entry)).toMatchObject([{ type: 'prompt', agentId: 's1/a1' }]);
   });
 
+  it('ends a subagent when it hands its report back, keeping the report as last message', () => {
+    const handback = assistant('m9', [{ type: 'tool_use', id: 'tu-h', name: 'SubagentHandback', input: { message: '  Rapport : 2 constats.  ' } }], { input_tokens: 1, output_tokens: 5 });
+    const parser = createTranscriptParser(SUB);
+    const events = parser.parseLine(handback);
+    expect(events.map((e) => e.type)).toEqual(['agent.seen', 'message', 'usage']);
+    expect(events[1]).toMatchObject({ text: 'Rapport : 2 constats.' });
+    const accepted = parser.parseLine(line({ type: 'user', timestamp: T0, message: { content: [{ type: 'tool_result', tool_use_id: 'tu-h', content: 'ok' }] } }));
+    expect(accepted).toMatchObject([{ type: 'agent.end', reason: 'rapport remis' }]);
+
+    // A refused hand-back does not end the subagent: it goes on working.
+    const other = createTranscriptParser(SUB);
+    other.parseLine(handback);
+    const refused = other.parseLine(line({ type: 'user', timestamp: T0, message: { content: [{ type: 'tool_result', tool_use_id: 'tu-h', is_error: true, content: 'refusé' }] } }));
+    expect(refused.map((e) => e.type)).toEqual(['turn.end']);
+    // In a session file the same tool name is an ordinary tool call.
+    expect(createTranscriptParser(SESSION).parseLine(handback).map((e) => e.type)).toContain('tool.start');
+  });
+
   it('ends the turn when the user interrupts, with or without a pending tool', () => {
     const parser = createTranscriptParser(SESSION);
     expect(parser.parseLine(line({ type: 'user', timestamp: T0, origin: { kind: 'human' }, message: { content: [{ type: 'text', text: '[Request interrupted by user]' }] } }))).toMatchObject([{ type: 'turn.end' }]);

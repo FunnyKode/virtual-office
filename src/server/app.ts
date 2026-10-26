@@ -9,6 +9,7 @@ import { parseHookPayload } from '../sources/claude-hooks.ts';
 import { allowedHosts, rejectReason } from './guard.ts';
 import type { Logger } from './logger.ts';
 import { createSseHub, type SseHub } from './sse.ts';
+import { cspFor, resolveStatic, type StaticTree } from './static.ts';
 import { tokenMatches } from './token.ts';
 
 export const TOKEN_HEADER = 'x-virtual-office-token';
@@ -19,6 +20,8 @@ export interface AppOptions {
   readonly token: string;
   readonly silenceMs: number;
   readonly publicDir: string;
+  /** node_modules/three, served under /vendor/three/. */
+  readonly threeDir: string;
   readonly logger: Logger;
   readonly now?: () => number;
   readonly sse?: { heartbeatMs: number; maxClients: number; maxBufferedBytes: number };
@@ -30,19 +33,20 @@ export interface App {
   readonly hub: SseHub;
 }
 
-const STATIC_FILES: Readonly<Record<string, { file: string; type: string }>> = {
-  '/': { file: 'index.html', type: 'text/html; charset=utf-8' },
-  '/app.js': { file: 'app.js', type: 'text/javascript; charset=utf-8' },
-  '/app.css': { file: 'app.css', type: 'text/css; charset=utf-8' },
+/** HTML pages, served with a CSP computed from their content. */
+const PAGES: Readonly<Record<string, string>> = {
+  '/': 'office.html',
+  '/tableau': 'index.html',
 };
+
+/** Only these Three.js files may be fetched: the core build and the example addons. */
+const THREE_FILES = /^(build\/three\.(module|core)\.js|examples\/jsm\/[\w/.-]+\.js)$/;
 
 const SECURITY_HEADERS = {
   'x-content-type-options': 'nosniff',
   'referrer-policy': 'no-referrer',
   'cache-control': 'no-store',
 } as const;
-
-const CSP = "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
 
 class HttpError extends Error {
   readonly status: number;
@@ -110,9 +114,24 @@ export function createApp(options: AppOptions): App {
     ok(res, { accepted: parsed.events.length }, 202);
   }
 
-  async function serveStatic(res: ServerResponse, entry: { file: string; type: string }): Promise<void> {
-    const body = await readFile(path.join(options.publicDir, entry.file));
-    res.writeHead(200, { ...SECURITY_HEADERS, 'content-type': entry.type, 'content-security-policy': CSP });
+  const trees: readonly StaticTree[] = [
+    { prefix: '/office/', root: path.join(options.publicDir, 'office'), maxAgeSeconds: 0 },
+    { prefix: '/vendor/three/', root: options.threeDir, allow: (relative) => THREE_FILES.test(relative), maxAgeSeconds: 3_600 }, // short: the URL carries no version
+    { prefix: '/', root: options.publicDir, allow: (relative) => /^app\.(js|css)$/.test(relative), maxAgeSeconds: 0 },
+  ];
+
+  async function servePage(res: ServerResponse, file: string): Promise<void> {
+    const html = await readFile(path.join(options.publicDir, file), 'utf8');
+    res.writeHead(200, { ...SECURITY_HEADERS, 'content-type': 'text/html; charset=utf-8', 'content-security-policy': cspFor(html) });
+    res.end(html);
+  }
+
+  async function serveFile(res: ServerResponse, pathname: string): Promise<void> {
+    const found = await resolveStatic(pathname, trees);
+    if (!found) throw new HttpError(404, 'introuvable');
+    const body = await readFile(found.file);
+    const cache = found.maxAgeSeconds > 0 ? `public, max-age=${found.maxAgeSeconds}` : 'no-store';
+    res.writeHead(200, { ...SECURITY_HEADERS, 'cache-control': cache, 'content-type': found.type });
     res.end(body);
   }
 
@@ -138,9 +157,9 @@ export function createApp(options: AppOptions): App {
       if (!hub.add(res, { event: 'snapshot', data: snapshot() })) throw new HttpError(503, 'trop de clients connectés');
       return;
     }
-    const entry = STATIC_FILES[pathname];
-    if (entry) return serveStatic(res, entry);
-    throw new HttpError(404, 'introuvable');
+    const page = Object.hasOwn(PAGES, pathname) ? PAGES[pathname] : undefined;
+    if (page) return servePage(res, page);
+    return serveFile(res, pathname);
   }
 
   const server = http.createServer((req, res) => {

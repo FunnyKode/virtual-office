@@ -1,4 +1,5 @@
 // Real HTTP server on an ephemeral port: routes, guard, hook intake and the SSE stream.
+import { createHash } from 'node:crypto';
 import http from 'node:http';
 import net from 'node:net';
 import path from 'node:path';
@@ -10,6 +11,7 @@ import type { Logger } from '../src/server/logger.ts';
 
 const TOKEN = 'a'.repeat(64);
 const PUBLIC_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'public');
+const THREE_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'node_modules', 'three');
 
 interface Reply {
   status: number;
@@ -71,7 +73,7 @@ describe('HTTP app', () => {
 
   beforeEach(async () => {
     store = createStore({ silenceMs: 60_000, windowMs: 3_600_000 });
-    app = createApp({ store, token: TOKEN, silenceMs: 60_000, publicDir: PUBLIC_DIR, logger, sse: { heartbeatMs: 20, maxClients: 2, maxBufferedBytes: 1 << 20 } });
+    app = createApp({ store, token: TOKEN, silenceMs: 60_000, publicDir: PUBLIC_DIR, threeDir: THREE_DIR, logger, sse: { heartbeatMs: 20, maxClients: 2, maxBufferedBytes: 1 << 20 } });
     port = (await app.listen(0, '127.0.0.1')).port;
   });
   afterEach(async () => {
@@ -96,6 +98,31 @@ describe('HTTP app', () => {
     expect((await request(port, { path: '/app.js' })).headers['content-type']).toContain('javascript');
     expect((await request(port, { path: '/../package.json' })).status).toBe(404);
     expect(JSON.parse((await request(port, { path: '/inconnu' })).body)).toEqual({ ok: false, error: 'introuvable' });
+  });
+
+  it('serves the 3D office with its import map allowed by hash, and the table page', async () => {
+    const office = await request(port, { path: '/' });
+    const importMap = /<script type="importmap">([\s\S]*?)<\/script>/.exec(office.body)?.[1] ?? '';
+    const hash = createHash('sha256').update(importMap).digest('base64');
+    expect(importMap).toContain('/vendor/three/');
+    expect(office.headers['content-security-policy']).toContain(`script-src 'self' 'sha256-${hash}'`);
+    expect(office.headers['content-security-policy']).not.toContain('unsafe-inline');
+    const table = await request(port, { path: '/tableau' });
+    expect(table.body).toContain('/app.js');
+    expect(table.headers['content-security-policy']).toContain("script-src 'self';");
+  });
+
+  it('serves office modules and Three.js, nothing else from those folders', async () => {
+    const module = await request(port, { path: '/office/office.js' });
+    expect(module.status).toBe(200);
+    expect(module.headers['cache-control']).toBe('no-store');
+    const three = await request(port, { path: '/vendor/three/build/three.module.js' });
+    expect(three.status).toBe(200);
+    expect(three.headers['cache-control']).toBe('public, max-age=3600');
+    expect((await request(port, { path: '/vendor/three/examples/jsm/controls/OrbitControls.js' })).status).toBe(200);
+    for (const forbidden of ['/vendor/three/package.json', '/vendor/three/src/Three.js', '/office/..%2F..%2Fpackage.json', '/office/%2e%2e/%2e%2e/package.json', '/office/', '/office/logic/%E0%A4%A.js', '/app.html']) {
+      expect((await request(port, { path: forbidden })).status, forbidden).toBe(404);
+    }
   });
 
   it.each([
@@ -174,7 +201,7 @@ describe('HTTP app', () => {
   });
 
   it('hides internal errors behind a generic 500 and logs them', async () => {
-    const broken = createApp({ store, token: TOKEN, silenceMs: 1, publicDir: '/nulle-part', logger });
+    const broken = createApp({ store, token: TOKEN, silenceMs: 1, publicDir: '/nulle-part', threeDir: THREE_DIR, logger });
     const brokenPort = (await broken.listen(0, '127.0.0.1')).port;
     const reply = await request(brokenPort, { path: '/' });
     expect(reply.status).toBe(500);

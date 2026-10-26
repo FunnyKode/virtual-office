@@ -30,7 +30,14 @@ async function main(): Promise<void> {
   await collector.scan();
   collector.start(config.scanIntervalMs);
 
-  const app = createApp({ store, token, silenceMs: config.silenceMs, publicDir: path.join(ROOT, 'public'), logger });
+  const app = createApp({
+    store,
+    token,
+    silenceMs: config.silenceMs,
+    publicDir: path.join(ROOT, 'public'),
+    threeDir: path.join(ROOT, 'node_modules', 'three'),
+    logger,
+  });
   const address = await app.listen(config.port, config.host);
   const pruner = setInterval(() => store.prune(), PRUNE_INTERVAL_MS);
   pruner.unref();
