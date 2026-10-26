@@ -1,0 +1,33 @@
+{
+  "name": "virtual-office",
+  "version": "0.1.0",
+  "description": "Bureau virtuel en direct des agents Claude Code : sessions, sous-agents, outils, permissions et jetons.",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "start": "node src/server/main.ts",
+    "hooks:install": "node scripts/install-hooks.ts",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "check": "npm run typecheck && npm run test:coverage"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/FunnyKode/virtual-office.git"
+  },
+  "bugs": {
+    "url": "https://github.com/FunnyKode/virtual-office/issues"
+  },
+  "homepage": "https://github.com/FunnyKode/virtual-office#readme",
+  "devDependencies": {
+    "@types/node": "^24.19.2",
+    "@vitest/coverage-v8": "^5.0.5",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.5"
+  }
+}
