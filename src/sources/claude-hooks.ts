@@ -43,7 +43,7 @@ function eventsFor(name: string, payload: Payload, agentId: string, at: number):
     case 'PostToolUseFailure':
       return toolUseId ? [{ ...base, type: 'tool.end', toolUseId, isError: name === 'PostToolUseFailure' }] : [];
     case 'PermissionRequest':
-      return [{ ...base, type: 'permission.wait', message: `Autorisation demandée : ${summarizeTool(toolName, payload['tool_input'])}` }];
+      return [{ ...base, type: 'permission.wait', message: summarizeTool(toolName, payload['tool_input']) }];
     case 'Notification':
       if (isPermissionNotification(payload)) return [{ ...base, type: 'permission.wait', message: str(payload, 'message') ?? 'Autorisation demandée' }];
       return str(payload, 'notification_type') === 'idle_prompt' ? [{ ...base, type: 'turn.end' }] : [];

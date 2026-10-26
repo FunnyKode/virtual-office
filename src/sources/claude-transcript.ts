@@ -42,6 +42,7 @@ function usageOf(message: Record<string, unknown>): TokenUsage | null {
   };
 }
 
+const HANDBACK_TOOL = 'SubagentHandback';
 /** Written by Claude Code when the user presses Escape; no end_turn and no Stop hook follow. */
 const INTERRUPTION = /^\[Request interrupted by user/;
 /** Messages repeat on consecutive lines, so a short memory of message ids is enough to deduplicate usage. */
@@ -74,6 +75,8 @@ function humanPrompt(entry: Entry, text: string): string | null {
 
 export function createTranscriptParser(context: TranscriptContext, now: () => number = Date.now): TranscriptParser {
   const countedUsage = new Map<string, TokenUsage>();
+  /** Hand-back calls of a subagent waiting for their result. */
+  const pendingHandbacks = new Set<string>();
   let lastTimestamp: number | null = null;
   let cwdReported = false;
 
@@ -107,7 +110,14 @@ export function createTranscriptParser(context: TranscriptContext, now: () => nu
       const type = block['type'];
       const id = asString(block['id']);
       const name = asString(block['name']);
-      if (type === 'tool_use' && id && name) {
+      if (type === 'tool_use' && name === HANDBACK_TOOL && context.kind === 'subagent' && id) {
+        // Observed in Claude Code 2.1: a subagent ends by handing its report back to its session.
+        // It is over only once the hand-back succeeds (see userEvents); a refused one lets it go on.
+        const input = isRecord(block['input']) ? block['input'] : {};
+        const report = asString(input['message'])?.trim();
+        if (report) events.push({ ...base(at), type: 'message', text: report });
+        pendingHandbacks.add(id);
+      } else if (type === 'tool_use' && id && name) {
         events.push({ ...base(at), type: 'tool.start', toolUseId: id, name, summary: summarizeTool(name, block['input']) });
       } else if (type === 'text') {
         const text = asString(block['text'])?.trim();
@@ -124,12 +134,12 @@ export function createTranscriptParser(context: TranscriptContext, now: () => nu
   function userEvents(entry: Entry, at: number): AgentEvent[] {
     const results: AgentEvent[] = blocksOf(entry)
       .filter((block) => block['type'] === 'tool_result' && asString(block['tool_use_id']))
-      .map((block) => ({
-        ...base(at),
-        type: 'tool.end',
-        toolUseId: String(block['tool_use_id']),
-        isError: block['is_error'] === true,
-      }));
+      .map((block): AgentEvent => {
+        const toolUseId = String(block['tool_use_id']);
+        const isError = block['is_error'] === true;
+        if (!pendingHandbacks.delete(toolUseId)) return { ...base(at), type: 'tool.end', toolUseId, isError };
+        return isError ? { ...base(at), type: 'turn.end' } : { ...base(at), type: 'agent.end', reason: 'rapport remis' };
+      });
     const text = userText(entry);
     if (INTERRUPTION.test(text)) return [...results, { ...base(at), type: 'turn.end' }];
     if (results.length > 0) return results;

@@ -1,7 +1,7 @@
 {
   "compilerOptions": {
     "target": "es2024",
-    "lib": ["es2024"],
+    "lib": ["es2024", "dom"],
     "module": "nodenext",
     "moduleResolution": "nodenext",
     "types": ["node"],
@@ -20,5 +20,5 @@
     "skipLibCheck": true,
     "noEmit": true
   },
-  "include": ["src", "scripts", "hooks", "test", "vitest.config.ts"]
+  "include": ["src", "scripts", "hooks", "test", "public/office/logic", "vitest.config.ts"]
 }

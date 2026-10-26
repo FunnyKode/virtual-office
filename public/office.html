@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bureau virtuel</title>
+<link rel="stylesheet" href="/office/office.css">
+<script type="importmap">{"imports":{"three":"/vendor/three/build/three.module.js","three/addons/":"/vendor/three/examples/jsm/"}}</script>
+<script type="module" src="/office/office.js"></script>
+</head>
+<body>
+<div id="scene" aria-hidden="true"></div>
+<div id="chargement" role="status">
+  <p>Chargement du bureau…</p>
+  <p class="secours">Rien ne s’affiche ? Le <a href="/tableau">tableau</a> donne les mêmes informations.</p>
+</div>
+
+<header class="barre">
+  <div class="verre titre">
+    <h1>Bureau virtuel</h1>
+    <p><span id="connexion" role="status">connexion…</span> · <span id="maj"></span></p>
+  </div>
+  <dl class="chiffres">
+    <div class="verre carte"><dt>Au travail</dt><dd id="k-travail">–</dd></div>
+    <div class="verre carte" id="k-autorisation-carte"><dt>Autorisations</dt><dd id="k-autorisation">–</dd></div>
+    <div class="verre carte"><dt>En attente</dt><dd id="k-attente">–</dd></div>
+    <div class="verre carte"><dt title="Jetons de sortie des agents actifs ces dernières 24 h (depuis leur début)">Jetons · actifs 24 h</dt><dd id="k-jetons">–</dd></div>
+  </dl>
+  <nav class="verre commandes" aria-label="Commandes">
+    <button type="button" id="b-recentrer">Recentrer</button>
+    <button type="button" id="b-tour" aria-pressed="false" title="Raccourci : T">Visite</button>
+    <button type="button" id="b-mouvements" aria-pressed="false">Mouvements réduits</button>
+    <a href="/tableau">Tableau</a>
+  </nav>
+</header>
+
+<div id="alerte" class="verre" role="alert" hidden></div>
+
+<nav class="verre liste" aria-labelledby="liste-titre">
+  <h2 id="liste-titre">Agents</h2>
+  <ul id="agents"><li class="vide">En attente des données…</li></ul>
+  <p id="debordement"></p>
+</nav>
+
+<aside id="fiche" class="verre" aria-labelledby="fiche-titre" hidden>
+  <div class="fiche-entete">
+    <h2 id="fiche-titre"></h2>
+    <button type="button" id="fiche-fermer" aria-label="Fermer la fiche">✕</button>
+  </div>
+  <dl id="fiche-details"></dl>
+</aside>
+
+<noscript><p class="verre sans-js">Le bureau 3D a besoin de JavaScript. Le <a href="/tableau">tableau</a> affiche les mêmes informations.</p></noscript>
+</body>
+</html>
